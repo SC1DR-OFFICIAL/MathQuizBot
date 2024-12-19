@@ -170,7 +170,7 @@ async def handle_answer(callback: types.CallbackQuery):
         correct_count += 1
         await callback.message.answer(f"✅ Верно! Ваш ответ: {user_answer}")
     else:
-        await callback.message.answer(f"🚫 Неверно! Ваш ответ: {user_answer}\n✅ Правильный ответ: {correct_answer}")
+        await callback.message.answer(f"❌ Неверно! Ваш ответ: {user_answer}\n✅ Правильный ответ: {correct_answer}")
 
     # Сохраняем ответ пользователя
     await save_user_answer(user_id, current_question_index, user_answer, is_correct)
@@ -306,18 +306,19 @@ async def generate_result_table(user_id, level, correct_count, total_questions):
         "Это был последний вопрос. Квиз завершен!",
         f"Ваш результат: {correct_count}/{total_questions}\n",
         "Вот ваши ответы:",
-        # Правый столбец (Вопрос) выравниваем по правому краю, левый (Результат) по центру
         "| Вопрос | Результат |",
         "|-------:|:---------:|"
     ]
 
     for (q_idx, u_ans, correct) in user_answers:
-        question_number = f"{q_idx+1:02d}"  # форматируем с ведущими нулями, например 01, 02...10
+        question_number = f"{q_idx+1:02d}"  # форматируем с ведущими нулями
         result_mark = "✅" if correct == 1 else "❌"
         result_lines.append(f"| {question_number} | {result_mark} |")
 
-    return "\n".join(result_lines)
+    # Добавляем финальное сообщение
+    result_lines.append("\nНажмите /start чтобы вернуться в меню.")
 
+    return "\n".join(result_lines)
 
 
 async def clear_user_answers(user_id):
