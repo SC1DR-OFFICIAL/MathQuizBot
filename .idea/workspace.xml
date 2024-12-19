@@ -4,11 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1a39274d-1055-461f-b896-8d25e8488a2b" name="Changes" comment="Вынес вопросы в отдельный файл">
-      <change afterPath="$PROJECT_DIR$/db.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/quiz.py" afterDir="false" />
+    <list default="true" id="1a39274d-1055-461f-b896-8d25e8488a2b" name="Changes" comment="Разбиение программы на:&#10;bot.py — основной файл с запуском бота, обработчиками команд и колбэков.&#10;db.py — функции работы с базой данных.&#10;quiz.py — вспомогательные функции для логики квиза (генерация вопросов, клавиатур, результатов и статистики).">
+      <change afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -263,7 +262,15 @@
       <option name="project" value="LOCAL" />
       <updated>1734591009720</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="Разбиение программы на:&#10;bot.py — основной файл с запуском бота, обработчиками команд и колбэков.&#10;db.py — функции работы с базой данных.&#10;quiz.py — вспомогательные функции для логики квиза (генерация вопросов, клавиатур, результатов и статистики).">
+      <option name="closed" value="true" />
+      <created>1734591737527</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1734591737527</updated>
+    </task>
+    <option name="localTasksCounter" value="12" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -284,6 +291,7 @@
     <MESSAGE value="Обработчики верно/неверно красивая форматировка" />
     <MESSAGE value="Кнопка &quot;Статистика&quot;" />
     <MESSAGE value="Вынес вопросы в отдельный файл" />
-    <option name="LAST_COMMIT_MESSAGE" value="Вынес вопросы в отдельный файл" />
+    <MESSAGE value="Разбиение программы на:&#10;bot.py — основной файл с запуском бота, обработчиками команд и колбэков.&#10;db.py — функции работы с базой данных.&#10;quiz.py — вспомогательные функции для логики квиза (генерация вопросов, клавиатур, результатов и статистики)." />
+    <option name="LAST_COMMIT_MESSAGE" value="Разбиение программы на:&#10;bot.py — основной файл с запуском бота, обработчиками команд и колбэков.&#10;db.py — функции работы с базой данных.&#10;quiz.py — вспомогательные функции для логики квиза (генерация вопросов, клавиатур, результатов и статистики)." />
   </component>
 </project>
