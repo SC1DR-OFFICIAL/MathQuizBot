@@ -149,9 +149,9 @@ async def handle_answer(callback: types.CallbackQuery):
     correct_answer = question_data['options'][correct_option]
 
     if chosen_index == correct_option:
-        await callback.message.answer(f"Верно! Ваш ответ: {user_answer}")
+        await callback.message.answer(f"✅ Верно! Ваш ответ: {user_answer}")
     else:
-        await callback.message.answer(f"Неверно! Ваш ответ: {user_answer}\nПравильный ответ: {correct_answer}")
+        await callback.message.answer(f"🚫 Неверно! Ваш ответ: {user_answer}\n✅ Правильный ответ: {correct_answer}")
 
     current_question_index += 1
     await update_user_state(user_id, question_index=current_question_index)
