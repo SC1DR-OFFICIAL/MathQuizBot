@@ -98,6 +98,7 @@ def generate_options_keyboard(answer_options, correct_index):
                 callback_data=f"answer_{i}"
             )
         )
+    # Каждая кнопка на отдельной строке
     builder.adjust(1)
     return builder.as_markup()
 
@@ -214,40 +215,53 @@ async def choose_level(callback: types.CallbackQuery):
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     builder = InlineKeyboardBuilder()
-    builder.add(
-        types.InlineKeyboardButton(
-            text="♟ Начать игру",
-            callback_data="start_game"
-        )
-    )
+    builder.add(types.InlineKeyboardButton(text="♟ Начать игру", callback_data="start_game"))
+    builder.add(types.InlineKeyboardButton(text="📊 Статистика", callback_data="show_stats"))
+    # Кнопки под друг другом
+    builder.adjust(1)
     await message.answer("Добро пожаловать в квиз!", reply_markup=builder.as_markup())
 
 
 @dp.callback_query(F.data == "start_game")
 async def start_game(callback: types.CallbackQuery):
     user_id = callback.from_user.id
-    # Предложим выбрать уровень сложности
-    builder = InlineKeyboardBuilder()
-    builder.add(
-        types.InlineKeyboardButton(
-            text="\u2b50 Легкий",
-            callback_data="level_1"
-        ),
-        types.InlineKeyboardButton(
-            text="\ud83d\udd25 Средний",
-            callback_data="level_2"
-        ),
-        types.InlineKeyboardButton(
-            text="\ud83c\udf0c Сложный",
-            callback_data="level_3"
-        )
-    )
+    # Удаляем предыдущую клавиатуру
     await callback.bot.edit_message_reply_markup(
         chat_id=user_id,
         message_id=callback.message.message_id,
         reply_markup=None
     )
+    # Кнопки уровней сложности в ряд
+    builder = InlineKeyboardBuilder()
+    builder.add(types.InlineKeyboardButton(text="\u2b50 Легкий", callback_data="level_1"),
+                types.InlineKeyboardButton(text="\ud83d\udd25 Средний", callback_data="level_2"),
+                types.InlineKeyboardButton(text="\ud83c\udf0c Сложный", callback_data="level_3"))
+    # Они добавлены в одну строчку, можно без adjust, т.к. все добавлены одним add
     await callback.message.answer("Выберите уровень сложности:", reply_markup=builder.as_markup())
+
+
+@dp.callback_query(F.data == "show_stats")
+async def show_stats_callback(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    # Удаляем предыдущую клавиатуру
+    await callback.bot.edit_message_reply_markup(
+        chat_id=user_id,
+        message_id=callback.message.message_id,
+        reply_markup=None
+    )
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute('SELECT last_score, last_level, last_played FROM quiz_results WHERE user_id = ?',
+                              (user_id,)) as cursor:
+            result = await cursor.fetchone()
+            if result:
+                last_score, last_level, last_played = result
+                total_questions = len(quiz_data.get(last_level, []))
+                await callback.message.answer(f"Ваш последний результат:\n"
+                                              f"Уровень: {last_level}\n"
+                                              f"Счет: {last_score}/{total_questions}\n"
+                                              f"Пройдено: {last_played}")
+            else:
+                await callback.message.answer("У вас еще нет статистики, пройдите квиз!")
 
 
 async def get_question(message, user_id):
