@@ -216,7 +216,7 @@ async def cmd_start(message: types.Message):
     builder = InlineKeyboardBuilder()
     builder.add(
         types.InlineKeyboardButton(
-            text="\ud83c\udfae Начать игру",
+            text="♟ Начать игру",
             callback_data="start_game"
         )
     )
