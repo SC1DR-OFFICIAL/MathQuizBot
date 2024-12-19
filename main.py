@@ -6,6 +6,7 @@ from aiogram.filters.command import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram import F
 import json
+from datetime import datetime
 
 # Включаем логирование
 logging.basicConfig(level=logging.INFO)
@@ -90,7 +91,6 @@ quiz_data = {
 
 def generate_options_keyboard(answer_options, correct_index):
     builder = InlineKeyboardBuilder()
-    # Вместо "right_answer"/"wrong_answer" теперь укажем индекс варианта: answer_{index}
     for i, option in enumerate(answer_options):
         builder.add(
             types.InlineKeyboardButton(
@@ -103,37 +103,54 @@ def generate_options_keyboard(answer_options, correct_index):
 
 
 async def get_user_state(user_id):
-    # Возвращает текущий индекс вопроса и уровень сложности для пользователя
     async with aiosqlite.connect(DB_NAME) as db:
-        async with db.execute('SELECT question_index, level FROM quiz_state WHERE user_id = ?', (user_id,)) as cursor:
+        async with db.execute('SELECT question_index, level, correct_count FROM quiz_state WHERE user_id = ?',
+                              (user_id,)) as cursor:
             result = await cursor.fetchone()
             if result:
-                return result[0], result[1]
-            return 0, None
+                return result[0], result[1], result[2]
+            return 0, None, 0
 
 
-async def update_user_state(user_id, question_index=None, level=None):
-    # Обновляем или устанавливаем индекс вопроса и/или уровень для пользователя
-    current_question_index, current_level = await get_user_state(user_id)
+async def update_user_state(user_id, question_index=None, level=None, correct_count=None):
+    current_question_index, current_level, current_correct = await get_user_state(user_id)
     if question_index is None:
         question_index = current_question_index
     if level is None:
         level = current_level
+    if correct_count is None:
+        correct_count = current_correct
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute('INSERT OR REPLACE INTO quiz_state (user_id, question_index, level) VALUES (?, ?, ?)',
-                         (user_id, question_index, level))
+        await db.execute(
+            'INSERT OR REPLACE INTO quiz_state (user_id, question_index, level, correct_count) VALUES (?, ?, ?, ?)',
+            (user_id, question_index, level, correct_count))
         await db.commit()
+
+
+async def save_user_answer(user_id, question_index, user_answer, correct):
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute(
+            'INSERT OR REPLACE INTO quiz_user_answers (user_id, question_index, user_answer, correct) VALUES (?, ?, ?, ?)',
+            (user_id, question_index, user_answer, 1 if correct else 0))
+        await db.commit()
+
+
+async def get_user_answers(user_id):
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute(
+                'SELECT question_index, user_answer, correct FROM quiz_user_answers WHERE user_id = ? ORDER BY question_index',
+                (user_id,)) as cursor:
+            return await cursor.fetchall()
 
 
 @dp.callback_query(F.data.startswith("answer_"))
 async def handle_answer(callback: types.CallbackQuery):
     user_id = callback.from_user.id
-    current_question_index, current_level = await get_user_state(user_id)
+    current_question_index, current_level, correct_count = await get_user_state(user_id)
     if current_level is None or current_question_index >= len(quiz_data[current_level]):
         await callback.message.answer("Квиз уже завершен или состояние некорректно.")
         return
 
-    # Извлекаем индекс выбранного варианта из callback_data
     chosen_str = callback.data.split("_")[1]
     chosen_index = int(chosen_str)
 
@@ -148,18 +165,27 @@ async def handle_answer(callback: types.CallbackQuery):
     user_answer = question_data['options'][chosen_index]
     correct_answer = question_data['options'][correct_option]
 
-    if chosen_index == correct_option:
+    is_correct = (chosen_index == correct_option)
+    if is_correct:
+        correct_count += 1
         await callback.message.answer(f"✅ Верно! Ваш ответ: {user_answer}")
     else:
         await callback.message.answer(f"🚫 Неверно! Ваш ответ: {user_answer}\n✅ Правильный ответ: {correct_answer}")
 
+    # Сохраняем ответ пользователя
+    await save_user_answer(user_id, current_question_index, user_answer, is_correct)
+
     current_question_index += 1
-    await update_user_state(user_id, question_index=current_question_index)
+    await update_user_state(user_id, question_index=current_question_index, correct_count=correct_count)
 
     if current_question_index < len(quiz_data[current_level]):
         await get_question(callback.message, user_id)
     else:
-        await callback.message.answer("Это был последний вопрос. Квиз завершен!")
+        total_questions = len(quiz_data[current_level])
+        await save_result(user_id, correct_count, current_level)
+        # Формируем таблицу результатов
+        result_text = await generate_result_table(user_id, current_level, correct_count, total_questions)
+        await callback.message.answer(result_text)
 
 
 @dp.callback_query(F.data.startswith("level_"))
@@ -175,8 +201,11 @@ async def choose_level(callback: types.CallbackQuery):
             message_id=callback.message.message_id,
             reply_markup=None
         )
+        # Сбрасываем состояние квиза и счетчик правильных ответов
+        await update_user_state(user_id, question_index=0, level=chosen_level, correct_count=0)
+        # Очищаем ответы пользователя из предыдущих попыток (опционально)
+        await clear_user_answers(user_id)
         await callback.message.answer(f"Вы выбрали уровень сложности {chosen_level}. Начнем игру!")
-        await update_user_state(user_id, question_index=0, level=chosen_level)
         await new_quiz(callback.message, user_id)
     except ValueError:
         await callback.message.answer("Произошла ошибка при выборе уровня сложности.")
@@ -222,7 +251,7 @@ async def start_game(callback: types.CallbackQuery):
 
 
 async def get_question(message, user_id):
-    current_question_index, current_level = await get_user_state(user_id)
+    current_question_index, current_level, correct_count = await get_user_state(user_id)
     if current_level is None:
         await message.answer("Невозможно получить вопрос: уровень не выбран.")
         return
@@ -238,18 +267,93 @@ async def get_question(message, user_id):
 
 
 async def new_quiz(message, user_id):
-    # Начинаем квиз с нулевого вопроса (уже установлено в choose_level)
     await get_question(message, user_id)
+
+
+async def save_result(user_id, correct_count, level):
+    # Сохраняем результат в таблицу quiz_results
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute(
+            'INSERT OR REPLACE INTO quiz_results (user_id, last_score, last_level, last_played) VALUES (?, ?, ?, ?)',
+            (user_id, correct_count, level, timestamp))
+        await db.commit()
+
+
+@dp.message(Command("stats"))
+async def cmd_stats(message: types.Message):
+    user_id = message.from_user.id
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute('SELECT last_score, last_level, last_played FROM quiz_results WHERE user_id = ?',
+                              (user_id,)) as cursor:
+            result = await cursor.fetchone()
+            if result:
+                last_score, last_level, last_played = result
+                total_questions = len(quiz_data.get(last_level, []))
+                await message.answer(f"Ваш последний результат:\n"
+                                     f"Уровень: {last_level}\n"
+                                     f"Счет: {last_score}/{total_questions}\n"
+                                     f"Пройдено: {last_played}")
+            else:
+                await message.answer("У вас еще нет статистики, пройдите квиз!")
+
+
+async def generate_result_table(user_id, level, correct_count, total_questions):
+    user_answers = await get_user_answers(user_id)
+    # user_answers: [(question_index, user_answer, correct), ...]
+
+    result_lines = [
+        "Это был последний вопрос. Квиз завершен!",
+        f"Ваш результат: {correct_count}/{total_questions}\n",
+        "Вот ваши ответы:",
+        # Правый столбец (Вопрос) выравниваем по правому краю, левый (Результат) по центру
+        "| Вопрос | Результат |",
+        "|-------:|:---------:|"
+    ]
+
+    for (q_idx, u_ans, correct) in user_answers:
+        question_number = f"{q_idx+1:02d}"  # форматируем с ведущими нулями, например 01, 02...10
+        result_mark = "✅" if correct == 1 else "❌"
+        result_lines.append(f"| {question_number} | {result_mark} |")
+
+    return "\n".join(result_lines)
+
+
+
+async def clear_user_answers(user_id):
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute('DELETE FROM quiz_user_answers WHERE user_id = ?', (user_id,))
+        await db.commit()
 
 
 async def create_table():
     async with aiosqlite.connect(DB_NAME) as db:
-        # Создаем таблицу, если ее нет
+        # Создаем таблицу состояния квиза
         await db.execute(
             '''CREATE TABLE IF NOT EXISTS quiz_state (
                 user_id INTEGER PRIMARY KEY,
                 question_index INTEGER,
-                level INTEGER
+                level INTEGER,
+                correct_count INTEGER
+            )'''
+        )
+        # Создаем таблицу результатов
+        await db.execute(
+            '''CREATE TABLE IF NOT EXISTS quiz_results (
+                user_id INTEGER PRIMARY KEY,
+                last_score INTEGER,
+                last_level INTEGER,
+                last_played TEXT
+            )'''
+        )
+        # Создаем таблицу для сохранения ответов на каждый вопрос
+        await db.execute(
+            '''CREATE TABLE IF NOT EXISTS quiz_user_answers (
+                user_id INTEGER,
+                question_index INTEGER,
+                user_answer TEXT,
+                correct INTEGER,
+                PRIMARY KEY(user_id, question_index)
             )'''
         )
         await db.commit()
