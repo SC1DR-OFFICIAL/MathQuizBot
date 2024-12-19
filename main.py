@@ -3,7 +3,7 @@ import asyncio
 import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters.command import Command
-from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram import F
 import json
 
@@ -109,9 +109,25 @@ async def wrong_answer(callback: types.CallbackQuery):
 # Хэндлер на команду /start
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    builder = ReplyKeyboardBuilder()
-    builder.add(types.KeyboardButton(text="Начать игру"))
-    await message.answer("Добро пожаловать в квиз!", reply_markup=builder.as_markup(resize_keyboard=True))
+    builder = InlineKeyboardBuilder()
+    builder.add(
+        types.InlineKeyboardButton(
+            text="\ud83c\udfae Начать игру",
+            callback_data="start_game"
+        )
+    )
+    await message.answer("Добро пожаловать в квиз!", reply_markup=builder.as_markup())
+
+
+@dp.callback_query(F.data == "start_game")
+async def start_game(callback: types.CallbackQuery):
+    await callback.bot.edit_message_reply_markup(
+        chat_id=callback.from_user.id,
+        message_id=callback.message.message_id,
+        reply_markup=None
+    )
+    await callback.message.answer("Давайте начнем квиз!")
+    await new_quiz(callback.message)
 
 
 async def get_question(message, user_id):
@@ -153,7 +169,6 @@ async def update_quiz_index(user_id, index):
 
 
 # Хэндлер на команду /quiz
-@dp.message(F.text == "Начать игру")
 @dp.message(Command("quiz"))
 async def cmd_quiz(message: types.Message):
     await message.answer(f"Давайте начнем квиз!")
@@ -175,26 +190,6 @@ async def main():
     # Запускаем создание таблицы базы данных
     await create_table()
 
-    await dp.start_polling(bot)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
-# Загрузка конфигурации
-config = load_config()
-bot = Bot(token=config["API_TOKEN"])
-dp = Dispatcher()
-
-# Регистрация обработчиков
-dp.callback_query.register(handle_correct_answer, lambda c: c.data == "right_answer")
-dp.callback_query.register(handle_incorrect_answer, lambda c: c.data == "wrong_answer")
-dp.message.register(handle_start_game, Command("start"))
-dp.message.register(cmd_quiz, Command("quiz"))
-
-
-# Главная функция
-async def main():
-    await create_table()
     await dp.start_polling(bot)
 
 
