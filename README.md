@@ -34,16 +34,16 @@
 ## Подготовка к запуску
 
 1. Установить зависимости:
-   ```bash
-   pip install -r requirements.txt``
-
+```bash
+   pip install -r requirements.txt
+```
 2. В файле config.json указать ваш токен Telegram бота:
 
-```json
-   {
-  "API_TOKEN": "ВАШ_ТОКЕН_ЗДЕСЬ"
-   }
-```
+  ```json
+     {
+    "API_TOKEN": "ВАШ_ТОКЕН_ЗДЕСЬ"
+     }
+  ```
     Данный токен можно получить у BotFather в Telegram.
 3. После того как вы указали токен, вы можете запустить бота командой:
 
