@@ -235,8 +235,7 @@ async def start_game(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
     builder.add(types.InlineKeyboardButton(text="\u2b50 Легкий", callback_data="level_1"),
                 types.InlineKeyboardButton(text="\ud83d\udd25 Средний", callback_data="level_2"),
-                types.InlineKeyboardButton(text="\ud83c\udf0c Сложный", callback_data="level_3"))
-    # Они добавлены в одну строчку, можно без adjust, т.к. все добавлены одним add
+                types.InlineKeyboardButton(text="🧠 Сложный", callback_data="level_3"))
     await callback.message.answer("Выберите уровень сложности:", reply_markup=builder.as_markup())
 
 
@@ -249,19 +248,40 @@ async def show_stats_callback(callback: types.CallbackQuery):
         message_id=callback.message.message_id,
         reply_markup=None
     )
+
+    result_text = await generate_stats_text(user_id)
+    await callback.message.answer(result_text)
+
+
+@dp.message(Command("stats"))
+async def cmd_stats(message: types.Message):
+    user_id = message.from_user.id
+    result_text = await generate_stats_text(user_id)
+    await message.answer(result_text)
+
+
+async def generate_stats_text(user_id):
+    # Получаем результаты по всем уровням
     async with aiosqlite.connect(DB_NAME) as db:
-        async with db.execute('SELECT last_score, last_level, last_played FROM quiz_results WHERE user_id = ?',
+        async with db.execute('SELECT level, last_score, last_played FROM quiz_results WHERE user_id = ?',
                               (user_id,)) as cursor:
-            result = await cursor.fetchone()
-            if result:
-                last_score, last_level, last_played = result
-                total_questions = len(quiz_data.get(last_level, []))
-                await callback.message.answer(f"Ваш последний результат:\n"
-                                              f"Уровень: {last_level}\n"
-                                              f"Счет: {last_score}/{total_questions}\n"
-                                              f"Пройдено: {last_played}")
-            else:
-                await callback.message.answer("У вас еще нет статистики, пройдите квиз!")
+            results = await cursor.fetchall()
+    if not results:
+        return "У вас еще нет статистики, пройдите квиз!\nНажмите /start и выберите «Начать игру»."
+
+    # Формируем текст статистики по всем уровням, которые есть
+    lines = ["Ваша статистика по последним прохождениям:"]
+    for level, last_score, last_played in results:
+        total_questions = len(quiz_data.get(level, []))
+        lines.append(
+            f"\nУровень: {level}\n"
+            f"Счет: {last_score}/{total_questions}\n"
+            f"Пройдено: {last_played}"
+        )
+
+    lines.append("\nДля возвращения в меню нажмите /start.")
+
+    return "\n".join(lines)
 
 
 async def get_question(message, user_id):
@@ -285,31 +305,13 @@ async def new_quiz(message, user_id):
 
 
 async def save_result(user_id, correct_count, level):
-    # Сохраняем результат в таблицу quiz_results
+    # Сохраняем результат по уровню
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(
-            'INSERT OR REPLACE INTO quiz_results (user_id, last_score, last_level, last_played) VALUES (?, ?, ?, ?)',
-            (user_id, correct_count, level, timestamp))
+            'INSERT OR REPLACE INTO quiz_results (user_id, level, last_score, last_played) VALUES (?, ?, ?, ?)',
+            (user_id, level, correct_count, timestamp))
         await db.commit()
-
-
-@dp.message(Command("stats"))
-async def cmd_stats(message: types.Message):
-    user_id = message.from_user.id
-    async with aiosqlite.connect(DB_NAME) as db:
-        async with db.execute('SELECT last_score, last_level, last_played FROM quiz_results WHERE user_id = ?',
-                              (user_id,)) as cursor:
-            result = await cursor.fetchone()
-            if result:
-                last_score, last_level, last_played = result
-                total_questions = len(quiz_data.get(last_level, []))
-                await message.answer(f"Ваш последний результат:\n"
-                                     f"Уровень: {last_level}\n"
-                                     f"Счет: {last_score}/{total_questions}\n"
-                                     f"Пройдено: {last_played}")
-            else:
-                await message.answer("У вас еще нет статистики, пройдите квиз!")
 
 
 async def generate_result_table(user_id, level, correct_count, total_questions):
@@ -352,13 +354,14 @@ async def create_table():
                 correct_count INTEGER
             )'''
         )
-        # Создаем таблицу результатов
+        # Создаем таблицу результатов (теперь с ключом по user_id и level)
         await db.execute(
             '''CREATE TABLE IF NOT EXISTS quiz_results (
-                user_id INTEGER PRIMARY KEY,
+                user_id INTEGER,
+                level INTEGER,
                 last_score INTEGER,
-                last_level INTEGER,
-                last_played TEXT
+                last_played TEXT,
+                PRIMARY KEY(user_id, level)
             )'''
         )
         # Создаем таблицу для сохранения ответов на каждый вопрос
